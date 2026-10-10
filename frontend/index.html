@@ -1,329 +1,369 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>VisionSOS</title>
-
-    <link
-        rel="stylesheet"
-        href="/style.css"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionSOS — Autonomous Multi-Emergency AI Sentinel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
 </head>
-
 <body>
 
-<div class="container">
+<div class="app-wrapper">
 
     <!-- ================================================= -->
-    <!-- HEADER -->
+    <!-- TOP NAVIGATION BAR -->
     <!-- ================================================= -->
-
-    <header class="header">
-
-        <div>
-
-            <h1>
-                Vision<span>SOS</span>
-            </h1>
-
-            <p>
-                Automatic Emergency Detection &amp; Response
-            </p>
-
+    <header class="top-nav">
+        <div class="brand">
+            <div class="brand-logo-icon">
+                <span class="pulsing-radar"></span>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="M12 8v4"/>
+                    <path d="M12 16h.01"/>
+                </svg>
+            </div>
+            <div class="brand-text">
+                <h1>Vision<span class="brand-accent">SOS</span></h1>
+                <p class="brand-tagline">Autonomous Multi-Hazard AI Sentinel</p>
+            </div>
         </div>
 
-        <div
-            id="system-badge"
-            class="system-badge active"
-        >
-            <span class="dot"></span>
-            SYSTEM ACTIVE
-        </div>
+        <div class="header-telemetry">
+            <div class="telemetry-pill" id="feed-source-pill">
+                <span class="pill-label">SOURCE:</span>
+                <span class="pill-value" id="source-display">STANDBY</span>
+            </div>
 
+            <div class="system-status-chip active" id="system-badge">
+                <span class="pulse-dot"></span>
+                <span id="system-badge-text">SYSTEM ONLINE</span>
+            </div>
+        </div>
     </header>
 
-
     <!-- ================================================= -->
-    <!-- CURRENT STATUS -->
+    <!-- MULTI-HAZARD REAL-TIME DETECTION MATRIX -->
     <!-- ================================================= -->
-
-    <section
-        id="status-card"
-        class="status-card normal"
-    >
-
-        <div
-            id="status-icon"
-            class="status-icon"
-        >
-            ✓
+    <section class="hazard-matrix-section">
+        <div class="matrix-header">
+            <div class="matrix-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                <span>ALL-IN-ONE REAL-TIME DETECTION MATRIX</span>
+            </div>
+            <span class="matrix-note">Unified Concurrent Inference Engine Active</span>
         </div>
 
-        <div class="status-content">
-
-            <div class="status-label">
-                CURRENT STATUS
+        <div class="hazard-grid">
+            <!-- 1. FALL & COLLAPSE -->
+            <div class="hazard-card" id="hazard-fall" data-hazard="fall">
+                <div class="hazard-card-glow"></div>
+                <div class="hazard-top">
+                    <span class="hazard-icon">💥</span>
+                    <span class="hazard-chip normal" id="chip-fall">NORMAL</span>
+                </div>
+                <div class="hazard-info">
+                    <h3>Fall & Collapse</h3>
+                    <p>Postural biomechanics & sudden immobility</p>
+                </div>
+                <div class="hazard-metric">
+                    <span class="metric-label">Status</span>
+                    <span class="metric-val" id="metric-fall">Monitoring</span>
+                </div>
             </div>
 
-            <div
-                id="current-status"
-                class="current-status"
-            >
-                NORMAL
+            <!-- 2. CAR ACCIDENT -->
+            <div class="hazard-card" id="hazard-car" data-hazard="car">
+                <div class="hazard-card-glow"></div>
+                <div class="hazard-top">
+                    <span class="hazard-icon">🚗</span>
+                    <span class="hazard-chip normal" id="chip-car">NORMAL</span>
+                </div>
+                <div class="hazard-info">
+                    <h3>Car Accident</h3>
+                    <p>Optical flow & kinetic collision vectors</p>
+                </div>
+                <div class="hazard-metric">
+                    <span class="metric-label">Status</span>
+                    <span class="metric-val" id="metric-car">Monitoring</span>
+                </div>
             </div>
 
-            <div
-                id="status-description"
-                class="status-description"
-            >
-                Monitoring for potential emergencies
+            <!-- 3. ROBBERY & THREAT -->
+            <div class="hazard-card" id="hazard-robbery" data-hazard="robbery">
+                <div class="hazard-card-glow"></div>
+                <div class="hazard-top">
+                    <span class="hazard-icon">🚨</span>
+                    <span class="hazard-chip normal" id="chip-robbery">NORMAL</span>
+                </div>
+                <div class="hazard-info">
+                    <h3>Robbery & Threat</h3>
+                    <p>Surrender postures & violent struggle</p>
+                </div>
+                <div class="hazard-metric">
+                    <span class="metric-label">Status</span>
+                    <span class="metric-val" id="metric-robbery">Monitoring</span>
+                </div>
             </div>
 
+            <!-- 4. FIRE & SMOKE -->
+            <div class="hazard-card" id="hazard-fire" data-hazard="fire">
+                <div class="hazard-card-glow"></div>
+                <div class="hazard-top">
+                    <span class="hazard-icon">🔥</span>
+                    <span class="hazard-chip normal" id="chip-fire">NORMAL</span>
+                </div>
+                <div class="hazard-info">
+                    <h3>Fire & Combustion</h3>
+                    <p>RGB-HSV flame flicker & thermal oscillation</p>
+                </div>
+                <div class="hazard-metric">
+                    <span class="metric-label">Status</span>
+                    <span class="metric-val" id="metric-fire">Monitoring</span>
+                </div>
+            </div>
         </div>
-
     </section>
 
-
     <!-- ================================================= -->
-    <!-- LIVE MONITORING -->
+    <!-- MAIN WORKSPACE: FEED + CONTROL & DISPATCH -->
     <!-- ================================================= -->
+    <main class="main-layout">
 
-    <section class="monitoring-card">
+        <!-- LEFT COLUMN: LIVE STREAM VIEWER -->
+        <div class="stream-column">
+            <div class="card viewer-card">
+                <div class="card-header">
+                    <div class="header-left">
+                        <h2>LIVE AI STREAM</h2>
+                        <span class="stream-pill live" id="stream-live-pill">
+                            <span class="live-blink"></span>
+                            <span id="stream-state-text">STANDBY</span>
+                        </span>
+                    </div>
+                    <div class="header-right">
+                        <span class="hud-tag" id="hud-fps">30 FPS</span>
+                        <span class="hud-tag">720p HD</span>
+                    </div>
+                </div>
 
-        <div class="section-header">
+                <!-- VIDEO FEED DISPLAY -->
+                <div class="stream-display" id="stream-display-box">
+                    <div class="hud-corners">
+                        <span class="corner tl"></span>
+                        <span class="corner tr"></span>
+                        <span class="corner bl"></span>
+                        <span class="corner br"></span>
+                    </div>
 
-            <h2>
-                LIVE MONITORING
-            </h2>
+                    <!-- ACTIVE CAMERA / VIDEO FRAME -->
+                    <img id="live-camera" src="/api/frame" alt="VisionSOS Live AI Stream" class="stream-img" style="display: none;">
 
-            <div class="live-indicator">
-                <span class="dot"></span>
-                LIVE
+                    <!-- STANDBY OVERLAY (WHEN CAMERA IS OFF) -->
+                    <div id="camera-standby-state" class="standby-overlay">
+                        <div class="standby-icon-ring">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M23 7l-7 5 7 5V7z"/>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                            </svg>
+                        </div>
+                        <h3>Feed is in Standby Mode</h3>
+                        <p>The camera does not open automatically. Start monitoring anytime below.</p>
+                        <div class="standby-actions">
+                            <button class="btn btn-primary" onclick="startWebcam()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                Launch Live Webcam
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- DYNAMIC STATE HUD OVERLAY -->
+                    <div id="stream-overlay-banner" class="stream-overlay-banner normal">
+                        <div class="overlay-left">
+                            <span class="overlay-icon" id="overlay-icon">✓</span>
+                            <div>
+                                <div class="overlay-title" id="overlay-title">ALL HAZARDS NORMAL</div>
+                                <div class="overlay-subtitle" id="overlay-subtitle">AI running 4 simultaneous neural & CV pipelines</div>
+                            </div>
+                        </div>
+                        <div class="overlay-countdown" id="overlay-countdown" style="display: none;">
+                            0.0s
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STREAM ACTION BAR -->
+                <div class="stream-action-bar">
+                    <div class="action-buttons-group">
+                        <button class="btn btn-primary" id="btn-cam-toggle" onclick="startWebcam()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                            Start Live Webcam
+                        </button>
+                        <button class="btn btn-secondary" id="btn-stop-stream" onclick="stopStream()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                            Stop Stream
+                        </button>
+                        <button class="btn btn-ghost" onclick="resetAlerts()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            Reset System
+                        </button>
+                    </div>
+                    <div class="stream-mode-badge" id="stream-mode-badge">
+                        Mode: Autonomous Multi-Scan
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNIFIED TESTING & UPLOAD DROPZONE -->
+            <div class="card upload-card">
+                <div class="card-header">
+                    <h2>TEST ANY VIDEO FILE (ALL EMERGENCIES IN ONE)</h2>
+                    <span class="badge-pill">Unified Scan</span>
+                </div>
+                <div class="upload-body">
+                    <form id="unified-test-form" class="unified-dropzone" onsubmit="handleVideoUpload(event)">
+                        <input type="file" id="video-file-input" name="video" accept="video/mp4,video/mov,video/avi,video/*" style="display: none;" onchange="handleFileSelected(this)">
+                        
+                        <div class="dropzone-content" onclick="document.getElementById('video-file-input').click()">
+                            <div class="upload-icon-circle">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                            </div>
+                            <div class="dropzone-text">
+                                <span class="drop-title" id="drop-title">Select or Drop Video (Fall, Accident, Robbery, Fire)</span>
+                                <span class="drop-hint" id="drop-hint">Supports MP4, MOV, AVI — No need to pick category, AI detects all automatically</span>
+                            </div>
+                        </div>
+
+                        <div class="upload-controls">
+                            <button type="submit" class="btn btn-accent" id="upload-submit-btn" disabled>
+                                Start Unified Test
+                            </button>
+                        </div>
+                    </form>
+                    <div id="upload-feedback" class="upload-feedback"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: LATEST INCIDENT & INCIDENT LOG -->
+        <div class="data-column">
+
+            <!-- LATEST EMERGENCY SPOTLIGHT -->
+            <div class="card spotlight-card" id="spotlight-card">
+                <div class="card-header">
+                    <h2>LATEST INCIDENT SPOTLIGHT</h2>
+                    <span class="severity-badge" id="spotlight-severity-badge">MONITORING</span>
+                </div>
+
+                <div id="no-incident-state" class="empty-state">
+                    <div class="empty-icon">🛡️</div>
+                    <h3>No Active Emergency</h3>
+                    <p>The unified sentinel is running normally. Any detected event will appear here in real time.</p>
+                </div>
+
+                <div id="active-incident-details" class="incident-details hidden">
+                    <div class="incident-main-banner" id="incident-type-banner">
+                        <span class="incident-large-icon" id="incident-icon">🚨</span>
+                        <div>
+                            <h3 id="incident-title">EMERGENCY DETECTED</h3>
+                            <span class="incident-trigger" id="incident-trigger">Trigger: Analyzing pattern</span>
+                        </div>
+                    </div>
+
+                    <!-- SNAPSHOT PREVIEW IF AVAILABLE -->
+                    <div class="snapshot-container" id="snapshot-container" style="display: none;">
+                        <img id="snapshot-img" src="" alt="Incident Snapshot">
+                        <span class="snapshot-tag">EVIDENCE SNAPSHOT</span>
+                    </div>
+
+                    <!-- TELEMETRY STATS -->
+                    <div class="incident-stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-name">Severity Score</span>
+                            <div class="stat-score-wrapper">
+                                <span class="stat-score-number" id="incident-score">0/100</span>
+                                <div class="score-progress-bar">
+                                    <div class="score-progress-fill" id="score-bar-fill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="stat-box">
+                            <span class="stat-name">AI Confidence</span>
+                            <span class="stat-val highlight" id="incident-confidence">0%</span>
+                        </div>
+
+                        <div class="stat-box">
+                            <span class="stat-name">Immobility / Delay</span>
+                            <span class="stat-val" id="incident-motionless">0s</span>
+                        </div>
+
+                        <div class="stat-box">
+                            <span class="stat-name">Timestamp</span>
+                            <span class="stat-val mono" id="incident-time">—</span>
+                        </div>
+                    </div>
+
+                    <!-- USER VERIFICATION / REVIEW -->
+                    <div class="incident-verification">
+                        <span class="verif-label">Operator Classification:</span>
+                        <div class="verif-buttons">
+                            <button class="btn btn-verif green" onclick="classifyCurrentIncident('Confirmed Incident')">
+                                ✓ Confirmed
+                            </button>
+                            <button class="btn btn-verif red" onclick="classifyCurrentIncident('False Alarm')">
+                                ✗ False Alarm
+                            </button>
+                            <button class="btn btn-verif gray" onclick="classifyCurrentIncident('Reviewed & Cleared')">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INCIDENT HISTORY LOG -->
+            <div class="card history-card">
+                <div class="card-header">
+                    <h2>INCIDENT HISTORY LOG</h2>
+                    <span class="history-count" id="history-count">0 incidents</span>
+                </div>
+
+                <div class="history-list" id="history-list">
+                    <div class="empty-history" id="empty-history-placeholder">
+                        No prior incidents recorded in database.
+                    </div>
+                </div>
             </div>
 
         </div>
 
+    </main>
 
-        <div class="camera-container">
-
-            <!-- ACTUAL LIVE FRAME -->
-
-            <img
-                id="live-camera"
-                src="/api/frame"
-                alt="VisionSOS Live Camera"
-            >
-
-
-            <!-- FALLBACK PLACEHOLDER -->
-
-            <div
-                id="camera-placeholder"
-                class="camera-placeholder"
-            >
-
-                <div class="camera-icon">
-                    📹
-                </div>
-
-                <div>
-                    Camera feed will appear here
-                </div>
-
-                <small>
-                    Waiting for computer vision module
-                </small>
-
-            </div>
-
-
-            <!-- STATUS OVERLAY -->
-
-            <div
-                id="camera-status-overlay"
-                class="camera-overlay"
-            >
-                NORMAL
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- ================================================= -->
-    <!-- LATEST EVENT -->
-    <!-- ================================================= -->
-
-    <section class="event-card">
-
-        <h2>
-            LATEST EVENT
-        </h2>
-
-
-        <div
-            id="no-event"
-            class="no-event"
-        >
-            No emergency events detected
-        </div>
-
-
-        <div
-            id="event-details"
-            class="event-details hidden"
-        >
-
-            <div
-                id="event-title"
-                class="event-title"
-            >
-                🚨 COLLAPSE
-            </div>
-
-
-            <div class="event-info">
-
-                <div class="info-row">
-
-                    <span>
-                        Severity
-                    </span>
-
-                    <strong
-                        id="event-label"
-                    >
-                        MEDIUM
-                    </strong>
-
-                </div>
-
-
-                <div class="info-row">
-
-                    <span>
-                        Score
-                    </span>
-
-                    <strong
-                        id="event-score"
-                    >
-                        0/100
-                    </strong>
-
-                </div>
-
-
-                <div class="info-row">
-
-                    <span>
-                        Confidence
-                    </span>
-
-                    <strong
-                        id="event-confidence"
-                    >
-                        0%
-                    </strong>
-
-                </div>
-
-
-                <div class="info-row">
-
-                    <span>
-                        Motionless
-                    </span>
-
-                    <strong
-                        id="event-motionless"
-                    >
-                        0s
-                    </strong>
-
-                </div>
-
-
-                <div class="info-row">
-
-                    <span>
-                        Time
-                    </span>
-
-                    <strong
-                        id="event-time"
-                    >
-                        —
-                    </strong>
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- ================================================= -->
-    <!-- EVENT HISTORY -->
-    <!-- ================================================= -->
-
-    <section class="history-card">
-
-        <div class="section-header">
-
-            <h2>
-                EVENT HISTORY
-            </h2>
-
-            <span
-                id="event-count"
-                class="event-count"
-            >
-                0 events
-            </span>
-
-        </div>
-
-
-        <div
-            id="event-history"
-            class="event-history"
-        >
-
-            <div class="empty-history">
-                No events recorded
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- ================================================= -->
     <!-- FOOTER -->
-    <!-- ================================================= -->
-
-    <footer>
-
-        VisionSOS • AI-powered emergency detection
-
+    <footer class="app-footer">
+        <div class="footer-left">
+            <span>VisionSOS Multi-Hazard AI Suite</span>
+            <span class="sep">•</span>
+            <span>Real-Time CV & Landmark Analytics</span>
+        </div>
+        <div class="footer-right">
+            <span>Falls • Collisions • Robbery • Fire</span>
+        </div>
     </footer>
 
 </div>
 
+<!-- TOAST CONTAINER -->
+<div id="toast-container" class="toast-container"></div>
 
 <script src="/app.js"></script>
-
 </body>
-
 </html>

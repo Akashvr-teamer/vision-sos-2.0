@@ -41,9 +41,16 @@ def init_db():
             fall_velocity REAL,
             timestamp TEXT,
             snapshot_path TEXT,
-            alert_sent INTEGER DEFAULT 0
+            alert_sent INTEGER DEFAULT 0,
+            category TEXT
         )
     """)
+
+    # Try to add category column if table exists from before
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN category TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
     conn.close()
@@ -68,9 +75,10 @@ def save_event(event, severity, severity_label, snapshot_path, alert_sent):
             fall_velocity,
             timestamp,
             snapshot_path,
-            alert_sent
+            alert_sent,
+            category
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         event["type"],
         event["confidence"],
@@ -80,7 +88,8 @@ def save_event(event, severity, severity_label, snapshot_path, alert_sent):
         event["fall_velocity"],
         event["timestamp"],
         snapshot_path,
-        int(alert_sent)
+        int(alert_sent),
+        event.get("category", event["type"].replace("_", " ").title())
     ))
 
     event_id = cursor.lastrowid
@@ -110,3 +119,17 @@ def get_events(limit=20):
     conn.close()
 
     return [dict(row) for row in rows]
+
+
+def update_event_category(event_id, category):
+    """
+    Update the category of an event.
+    """
+    conn = get_connection()
+    conn.execute(
+        "UPDATE events SET category = ? WHERE id = ?",
+        (category, event_id)
+    )
+    conn.commit()
+    conn.close()
+    return True

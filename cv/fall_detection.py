@@ -33,19 +33,19 @@ except ImportError:
 # CONSTANTS
 # -----------------------------------------
 
-ANGLE_THRESHOLD = 45
+ANGLE_THRESHOLD = 60
 
-GAP_THRESHOLD = 0.25
+GAP_THRESHOLD = 0.20
 
 MOTION_THRESHOLD = 0.005
 
-STILLNESS_SECONDS = 3
+STILLNESS_SECONDS = 3.5
 
 FPS = 25
 
-ANGLE_JUMP = 15
+ANGLE_JUMP = 25
 
-SUSTAINED_FRAMES = 30
+SUSTAINED_FRAMES = 45
 
 
 # -----------------------------------------
