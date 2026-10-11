@@ -44,18 +44,24 @@ except (AttributeError, Exception):
 
 # Extracts the normalized [x, y] coordinates of a given landmark name or enum.
 def get_point(landmarks, name):
+    if landmarks is None or not hasattr(landmarks, "landmark") or len(landmarks.landmark) == 0:
+        return np.zeros(2, dtype=float)
     if isinstance(name, str):
         idx = PoseLandmark[name].value
     elif hasattr(name, "value"):
         idx = name.value
     else:
         idx = int(name)
+    if idx >= len(landmarks.landmark):
+        return np.zeros(2, dtype=float)
     landmark = landmarks.landmark[idx]
     return np.array([landmark.x, landmark.y], dtype=float)
 
 
 # Computes the torso angle in degrees away from vertical (0=standing, 90=flat).
 def torso_angle(landmarks):
+    if landmarks is None or not hasattr(landmarks, "landmark"):
+        return 0.0
     left_shoulder = get_point(landmarks, PoseLandmark.LEFT_SHOULDER)
     right_shoulder = get_point(landmarks, PoseLandmark.RIGHT_SHOULDER)
     shoulder_mid = (left_shoulder + right_shoulder) / 2.0
@@ -72,6 +78,8 @@ def torso_angle(landmarks):
 
 # Computes the absolute vertical distance between the nose and the ankle midpoint.
 def head_ankle_gap(landmarks):
+    if landmarks is None or not hasattr(landmarks, "landmark"):
+        return 1.0
     nose = get_point(landmarks, PoseLandmark.NOSE)
     left_ankle = get_point(landmarks, PoseLandmark.LEFT_ANKLE)
     right_ankle = get_point(landmarks, PoseLandmark.RIGHT_ANKLE)
@@ -79,15 +87,32 @@ def head_ankle_gap(landmarks):
     return float(abs(nose[1] - ankle_avg_y))
 
 
-# Computes the mean Euclidean displacement of all 33 landmarks across frames.
+# Computes the Euclidean displacement of landmarks across frames.
+# Emphasizes stable core torso landmarks (shoulders, hips) to reject extremity jitter.
 def motion_energy(landmarks, prev_points):
+    if landmarks is None or not hasattr(landmarks, "landmark"):
+        return (0.0, prev_points)
+
     current_points = np.array(
         [[lm.x, lm.y] for lm in landmarks.landmark], dtype=float
     )
-    if prev_points is None:
+    if prev_points is None or prev_points.shape != current_points.shape:
         return (0.0, current_points)
+
     distances = np.linalg.norm(current_points - prev_points, axis=1)
-    return (float(np.mean(distances)), current_points)
+
+    # Core landmarks: nose(0), shoulders(11,12), hips(23,24), knees(25,26)
+    core_indices = [0, 11, 12, 23, 24, 25, 26]
+    valid_indices = [i for i in core_indices if i < len(distances)]
+    if valid_indices:
+        core_motion = float(np.mean(distances[valid_indices]))
+    else:
+        core_motion = float(np.mean(distances))
+
+    overall_motion = float(np.median(distances))
+    # Combined motion resistant to individual fingertip/toe jitter
+    motion = 0.7 * core_motion + 0.3 * overall_motion
+    return (motion, current_points)
 
 
 if __name__ == "__main__":

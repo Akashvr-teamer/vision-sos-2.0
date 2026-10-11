@@ -223,6 +223,43 @@ body {
     color: var(--text-muted);
 }
 
+.category-filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.category-pill {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.category-pill:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.category-pill.active {
+    background: rgba(0, 240, 255, 0.12);
+    border-color: #00f0ff;
+    color: #00f0ff;
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.25);
+}
+
 .hazard-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -239,12 +276,31 @@ body {
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
-    transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+    cursor: pointer;
+    transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease;
 }
 
 .hazard-card:hover {
     transform: translateY(-2px);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.hazard-card.category-selected {
+    border-color: #00f0ff !important;
+    background: rgba(0, 240, 255, 0.06) !important;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.25) !important;
+    transform: translateY(-2px);
+}
+
+.hazard-card.category-selected .hazard-card-glow {
+    background: #00f0ff !important;
+    opacity: 1 !important;
+}
+
+.hazard-card.category-dimmed {
+    opacity: 0.40;
+    filter: grayscale(30%);
 }
 
 .hazard-card-glow {

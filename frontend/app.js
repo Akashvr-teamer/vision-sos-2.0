@@ -1,11 +1,99 @@
 // ============================================================
-// VISIONSOS — UNIFIED MULTI-HAZARD FRONTEND CONTROLLER
+// VISIONSOS — MULTI-HAZARD FRONTEND CONTROLLER (ISOLATED + UNIFIED)
 // ============================================================
 
 let currentSelectedEventId = null;
 let isStreamActive = false;
 let cameraErrorCount = 0;
 let lastStateString = "";
+let selectedCategory = "Unified";
+
+const CATEGORY_NAMES = {
+    "Unified": "All Hazards (Unified)",
+    "fall": "Fall & Collapse",
+    "car": "Car Accident",
+    "robbery": "Robbery & Threat",
+    "fire": "Fire & Smoke"
+};
+
+function selectCategory(catKey) {
+    if (!catKey) catKey = "Unified";
+    selectedCategory = catKey;
+
+    // 1. Update filter pill buttons
+    document.querySelectorAll(".category-pill").forEach(pill => {
+        pill.classList.remove("active");
+    });
+    const activePill = document.getElementById(`pill-cat-${catKey}`);
+    if (activePill) {
+        activePill.classList.add("active");
+    }
+
+    // 2. Update hazard cards highlight and isolation dimming
+    const hazardKeys = ["fall", "car", "robbery", "fire"];
+    hazardKeys.forEach(k => {
+        const card = document.getElementById(`hazard-${k}`);
+        if (!card) return;
+        card.classList.remove("category-selected", "category-dimmed");
+
+        if (catKey === "Unified") {
+            // All cards active, no dimming
+        } else if (k === catKey) {
+            card.classList.add("category-selected");
+        } else {
+            card.classList.add("category-dimmed");
+        }
+    });
+
+    // 3. Update hidden input
+    const hiddenInput = document.getElementById("selected-category-input");
+    if (hiddenInput) hiddenInput.value = catKey;
+
+    // 4. Update badge pills and hints
+    const badge = document.getElementById("upload-category-badge");
+    const modeBadge = document.getElementById("stream-mode-badge");
+    const dropHint = document.getElementById("drop-hint");
+    const submitBtn = document.getElementById("upload-submit-btn");
+    const btnCamToggle = document.getElementById("btn-cam-toggle");
+
+    const catName = CATEGORY_NAMES[catKey] || catKey;
+
+    if (badge) badge.textContent = `Mode: ${catName}`;
+    if (modeBadge) {
+        modeBadge.textContent = catKey === "Unified"
+            ? "Mode: Autonomous Multi-Scan"
+            : `Mode: ${catName} (Isolated)`;
+    }
+    if (dropHint) {
+        dropHint.textContent = `Supports MP4, MOV, AVI — Active Detector: ${catName}`;
+    }
+    if (submitBtn) {
+        submitBtn.textContent = `Start Test: ${catName}`;
+    }
+    if (btnCamToggle && !isStreamActive) {
+        btnCamToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Start Live Webcam (${catName})`;
+    }
+
+    // 5. If stream is currently active, notify backend immediately to switch detector mode on the fly!
+    if (isStreamActive) {
+        fetch("/api/set_category", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: catKey })
+        })
+        .then(res => res.json())
+        .then(data => {
+            showToast(`Switched active detector to: ${catName}`, "success");
+            updateStatus();
+        })
+        .catch(err => {
+            console.error("Error setting category:", err);
+        });
+    } else {
+        showToast(`Selected detection mode: ${catName}`, "info");
+    }
+}
+
 
 // ============================================================
 // SYSTEM & HAZARD MATRIX STATUS UPDATES
@@ -39,7 +127,8 @@ async function updateStatus() {
             } else {
                 streamStateText.textContent = "STANDBY";
                 streamLivePill.className = "stream-pill";
-                if (btnCamToggle) btnCamToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Start Live Webcam`;
+                const catName = CATEGORY_NAMES[selectedCategory] || selectedCategory;
+                if (btnCamToggle) btnCamToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Start Live Webcam (${catName})`;
             }
         }
 
@@ -47,9 +136,14 @@ async function updateStatus() {
             if (isStreamActive) {
                 standbyOverlay.style.display = "none";
                 cameraImg.style.display = "block";
+                if (!cameraImg.src.includes("/api/video_feed") && useMjpegStream) {
+                    cameraImg.src = "/api/video_feed";
+                }
             } else {
                 standbyOverlay.style.display = "flex";
                 cameraImg.style.display = "none";
+                cameraImg.src = "";
+                useMjpegStream = true;
             }
         }
 
@@ -92,8 +186,13 @@ function updateHazardCard(hazardKey, state) {
     } else {
         chip.classList.add("normal");
         chip.textContent = "NORMAL";
-        metric.textContent = isStreamActive ? "All Clear • Scanning" : "Standby";
-        metric.style.color = "#90a0be";
+        if (selectedCategory !== "Unified" && hazardKey !== selectedCategory) {
+            metric.textContent = "Standby (Isolated Mode)";
+            metric.style.color = "#607085";
+        } else {
+            metric.textContent = isStreamActive ? "All Clear • Scanning" : "Standby";
+            metric.style.color = "#90a0be";
+        }
     }
 }
 
@@ -135,20 +234,27 @@ function updateStreamHUD(state, countdown) {
     } else {
         icon.textContent = "✓";
         icon.style.color = "#00f084";
-        title.textContent = "ALL HAZARDS NORMAL";
-        subtitle.textContent = "AI running 4 concurrent neural & computer vision pipelines";
+        const catName = CATEGORY_NAMES[selectedCategory] || selectedCategory;
+        if (selectedCategory === "Unified") {
+            title.textContent = "ALL HAZARDS NORMAL";
+            subtitle.textContent = "AI running 4 concurrent neural & computer vision pipelines";
+        } else {
+            title.textContent = `${catName.toUpperCase()} — NORMAL`;
+            subtitle.textContent = `Running isolated ${catName} pipeline to prevent cross-hazard clashes`;
+        }
         cdElem.style.display = "none";
     }
 }
 
 // ============================================================
-// LIVE CAMERA FRAME STREAMER
+// LIVE CAMERA FRAME STREAMER (MJPEG + Polling Fallback)
 // ============================================================
 
 let isFetchingFrame = false;
+let useMjpegStream = true;
 
 function updateCameraFrame() {
-    if (!isStreamActive) return;
+    if (!isStreamActive || useMjpegStream) return;
     const camera = document.getElementById("live-camera");
     if (!camera || isFetchingFrame) return;
 
@@ -288,8 +394,10 @@ function updateSpotlight(event) {
 async function startWebcam() {
     const formData = new FormData();
     formData.append("source_type", "camera");
+    formData.append("category", selectedCategory);
 
-    showToast("Starting live webcam feed with Unified AI...", "info");
+    const catName = CATEGORY_NAMES[selectedCategory] || selectedCategory;
+    showToast(`Starting live webcam feed with ${catName}...`, "info");
 
     try {
         const response = await fetch("/api/start_test", {
@@ -298,7 +406,7 @@ async function startWebcam() {
         });
         const data = await response.json();
         if (response.ok) {
-            showToast(data.message || "Webcam active", "success");
+            showToast(data.message || `Webcam active (${catName})`, "success");
             isStreamActive = true;
             await updateStatus();
         } else {
@@ -340,12 +448,14 @@ function handleFileSelected(input) {
     const dropTitle = document.getElementById("drop-title");
     const dropHint = document.getElementById("drop-hint");
     const submitBtn = document.getElementById("upload-submit-btn");
+    const catName = CATEGORY_NAMES[selectedCategory] || selectedCategory;
 
     if (input.files && input.files.length > 0) {
         const file = input.files[0];
         dropTitle.textContent = `Selected: ${file.name}`;
-        dropHint.textContent = `Size: ${(file.size / (1024 * 1024)).toFixed(1)} MB • Click Start Unified Test below`;
+        dropHint.textContent = `Size: ${(file.size / (1024 * 1024)).toFixed(1)} MB • Click Start Test (${catName}) below`;
         submitBtn.disabled = false;
+        submitBtn.textContent = `Start Test: ${catName}`;
     }
 }
 
@@ -354,6 +464,7 @@ async function handleVideoUpload(event) {
     const fileInput = document.getElementById("video-file-input");
     const submitBtn = document.getElementById("upload-submit-btn");
     const feedback = document.getElementById("upload-feedback");
+    const catName = CATEGORY_NAMES[selectedCategory] || selectedCategory;
 
     if (!fileInput.files || fileInput.files.length === 0) {
         showToast("Please select a video file first", "error");
@@ -362,11 +473,12 @@ async function handleVideoUpload(event) {
 
     const formData = new FormData();
     formData.append("source_type", "video");
+    formData.append("category", selectedCategory);
     formData.append("video", fileInput.files[0]);
 
     submitBtn.disabled = true;
-    submitBtn.textContent = "Uploading & Launching...";
-    feedback.textContent = "Uploading test video...";
+    submitBtn.textContent = `Uploading & Launching (${catName})...`;
+    feedback.textContent = `Uploading test video for ${catName}...`;
     feedback.style.color = "#90a0be";
 
     try {
@@ -377,7 +489,7 @@ async function handleVideoUpload(event) {
         const data = await response.json();
 
         if (response.ok) {
-            showToast("Video loaded! Unified detection running...", "success");
+            showToast(`Video loaded! ${catName} detection running...`, "success");
             feedback.textContent = data.message;
             feedback.style.color = "#00f084";
             isStreamActive = true;
@@ -393,7 +505,7 @@ async function handleVideoUpload(event) {
         feedback.style.color = "#ff2d55";
     } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Start Unified Test";
+        submitBtn.textContent = `Start Test: ${catName}`;
     }
 }
 

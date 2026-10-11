@@ -52,14 +52,20 @@
         <div class="matrix-header">
             <div class="matrix-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-                <span>ALL-IN-ONE REAL-TIME DETECTION MATRIX</span>
+                <span>EMERGENCY DETECTION PIPELINE MATRIX</span>
             </div>
-            <span class="matrix-note">Unified Concurrent Inference Engine Active</span>
+            <div class="category-filter-pills" id="category-pills">
+                <button type="button" class="category-pill active" id="pill-cat-Unified" onclick="selectCategory('Unified')">✦ All / Unified</button>
+                <button type="button" class="category-pill" id="pill-cat-fall" onclick="selectCategory('fall')">💥 Fall &amp; Collapse</button>
+                <button type="button" class="category-pill" id="pill-cat-car" onclick="selectCategory('car')">🚗 Car Accident</button>
+                <button type="button" class="category-pill" id="pill-cat-robbery" onclick="selectCategory('robbery')">🚨 Robbery</button>
+                <button type="button" class="category-pill" id="pill-cat-fire" onclick="selectCategory('fire')">🔥 Fire &amp; Smoke</button>
+            </div>
         </div>
 
         <div class="hazard-grid">
             <!-- 1. FALL & COLLAPSE -->
-            <div class="hazard-card" id="hazard-fall" data-hazard="fall">
+            <div class="hazard-card" id="hazard-fall" data-hazard="fall" onclick="selectCategory('fall')" title="Click to isolate Fall & Collapse program">
                 <div class="hazard-card-glow"></div>
                 <div class="hazard-top">
                     <span class="hazard-icon">💥</span>
@@ -76,7 +82,7 @@
             </div>
 
             <!-- 2. CAR ACCIDENT -->
-            <div class="hazard-card" id="hazard-car" data-hazard="car">
+            <div class="hazard-card" id="hazard-car" data-hazard="car" onclick="selectCategory('car')" title="Click to isolate Car Accident program">
                 <div class="hazard-card-glow"></div>
                 <div class="hazard-top">
                     <span class="hazard-icon">🚗</span>
@@ -93,7 +99,7 @@
             </div>
 
             <!-- 3. ROBBERY & THREAT -->
-            <div class="hazard-card" id="hazard-robbery" data-hazard="robbery">
+            <div class="hazard-card" id="hazard-robbery" data-hazard="robbery" onclick="selectCategory('robbery')" title="Click to isolate Robbery program">
                 <div class="hazard-card-glow"></div>
                 <div class="hazard-top">
                     <span class="hazard-icon">🚨</span>
@@ -110,7 +116,7 @@
             </div>
 
             <!-- 4. FIRE & SMOKE -->
-            <div class="hazard-card" id="hazard-fire" data-hazard="fire">
+            <div class="hazard-card" id="hazard-fire" data-hazard="fire" onclick="selectCategory('fire')" title="Click to isolate Fire & Smoke program">
                 <div class="hazard-card-glow"></div>
                 <div class="hazard-top">
                     <span class="hazard-icon">🔥</span>
@@ -217,15 +223,16 @@
                 </div>
             </div>
 
-            <!-- UNIFIED TESTING & UPLOAD DROPZONE -->
+            <!-- HAZARD TESTING & UPLOAD DROPZONE -->
             <div class="card upload-card">
                 <div class="card-header">
-                    <h2>TEST ANY VIDEO FILE (ALL EMERGENCIES IN ONE)</h2>
-                    <span class="badge-pill">Unified Scan</span>
+                    <h2>TEST VIDEO FILE WITH SELECTED DETECTOR</h2>
+                    <span class="badge-pill" id="upload-category-badge">Mode: All Hazards</span>
                 </div>
                 <div class="upload-body">
                     <form id="unified-test-form" class="unified-dropzone" onsubmit="handleVideoUpload(event)">
                         <input type="file" id="video-file-input" name="video" accept="video/mp4,video/mov,video/avi,video/*" style="display: none;" onchange="handleFileSelected(this)">
+                        <input type="hidden" id="selected-category-input" name="category" value="Unified">
                         
                         <div class="dropzone-content" onclick="document.getElementById('video-file-input').click()">
                             <div class="upload-icon-circle">
@@ -237,13 +244,13 @@
                             </div>
                             <div class="dropzone-text">
                                 <span class="drop-title" id="drop-title">Select or Drop Video (Fall, Accident, Robbery, Fire)</span>
-                                <span class="drop-hint" id="drop-hint">Supports MP4, MOV, AVI — No need to pick category, AI detects all automatically</span>
+                                <span class="drop-hint" id="drop-hint">Supports MP4, MOV, AVI — Active Detector: All / Unified (Select above to isolate)</span>
                             </div>
                         </div>
 
                         <div class="upload-controls">
                             <button type="submit" class="btn btn-accent" id="upload-submit-btn" disabled>
-                                Start Unified Test
+                                Start Test: All Hazards
                             </button>
                         </div>
                     </form>

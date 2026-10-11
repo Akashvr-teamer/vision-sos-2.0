@@ -3,6 +3,14 @@ import cv2
 import mediapipe as mp
 
 
+class LandmarkItem:
+    def __init__(self, x, y, z=0.0, visibility=1.0):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        self.visibility = float(visibility)
+
+
 class LandmarksWrapper:
     def __init__(self, landmark_list):
         self.landmark = landmark_list
@@ -22,10 +30,10 @@ if use_legacy:
     mp_pose = mp.solutions.pose
     pose_detector = mp_pose.Pose(
         static_image_mode=False,
-        model_complexity=0,
+        model_complexity=1,
         smooth_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
+        min_detection_confidence=0.35,
+        min_tracking_confidence=0.35
     )
     mp_draw = mp.solutions.drawing_utils
 else:
@@ -38,48 +46,142 @@ else:
     base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
     options = vision.PoseLandmarkerOptions(
         base_options=base_options,
-        running_mode=vision.RunningMode.IMAGE
+        running_mode=vision.RunningMode.IMAGE,
+        min_pose_detection_confidence=0.35,
+        min_pose_presence_confidence=0.35,
+        min_tracking_confidence=0.35
     )
     pose_detector = vision.PoseLandmarker.create_from_options(options)
     mp_draw = None
 
 
+# Persistent temporal state to prevent skeleton flickering and dropout
+_last_landmarks = None
+_missing_count = 0
+MAX_PERSIST_FRAMES = 12  # Maintain skeleton for up to 12 frames (~0.4s) across brief dropouts
+EMA_ALPHA = 0.70         # Smoothing factor (0.70 current + 0.30 history)
+
+
+def reset_tracking():
+    """Resets cached landmarks."""
+    global _last_landmarks, _missing_count
+    _last_landmarks = None
+    _missing_count = 0
+
+
+def _to_landmark_wrapper(raw_landmarks):
+    """Converts any landmark list to our standard LandmarksWrapper."""
+    if raw_landmarks is None:
+        return None
+    items = []
+    for lm in raw_landmarks:
+        items.append(LandmarkItem(
+            x=getattr(lm, "x", 0.0),
+            y=getattr(lm, "y", 0.0),
+            z=getattr(lm, "z", 0.0),
+            visibility=getattr(lm, "visibility", 1.0)
+        ))
+    return LandmarksWrapper(items)
+
+
+def _smooth_landmarks(current_wrapper, prev_wrapper, alpha=EMA_ALPHA):
+    """Applies Exponential Moving Average smoothing between frames."""
+    if prev_wrapper is None or len(current_wrapper.landmark) != len(prev_wrapper.landmark):
+        return current_wrapper
+    smoothed = []
+    for cur, prev in zip(current_wrapper.landmark, prev_wrapper.landmark):
+        sm_x = alpha * cur.x + (1.0 - alpha) * prev.x
+        sm_y = alpha * cur.y + (1.0 - alpha) * prev.y
+        sm_z = alpha * cur.z + (1.0 - alpha) * prev.z
+        smoothed.append(LandmarkItem(sm_x, sm_y, sm_z, cur.visibility))
+    return LandmarksWrapper(smoothed)
+
+
+def is_valid_human_pose(wrapper):
+    """
+    Validates anatomical proportions to prevent hallucinations on inanimate objects
+    (like shipping container roofs, road markings, or building edges).
+    """
+    if wrapper is None or not hasattr(wrapper, "landmark") or len(wrapper.landmark) == 0:
+        return False
+    try:
+        xs = [lm.x for lm in wrapper.landmark]
+        ys = [lm.y for lm in wrapper.landmark]
+        bw = max(xs) - min(xs)
+        bh = max(ys) - min(ys)
+        # Inanimate horizontal edges (e.g. shipping container roofs) have near-zero height
+        if bh < 0.08:
+            return False
+        if bw > 0.25 and (bh / max(bw, 0.001)) < 0.20:
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def get_landmarks(frame):
+    """
+    Detects pose landmarks with temporal persistence and EMA smoothing.
+    Prevents skeleton dropouts when a person falls or is partially occluded.
+    Filters out phantom non-human artifacts on vehicles.
+    """
+    global _last_landmarks, _missing_count
+
     if frame is None:
         return None
 
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    detected_wrapper = None
 
-    if use_legacy:
-        results = pose_detector.process(rgb_frame)
-        if not results.pose_landmarks:
-            return None
-        return results.pose_landmarks
+    try:
+        if use_legacy:
+            results = pose_detector.process(rgb_frame)
+            if results.pose_landmarks:
+                detected_wrapper = _to_landmark_wrapper(results.pose_landmarks.landmark)
+        else:
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+            results = pose_detector.detect(mp_image)
+            if results.pose_landmarks and len(results.pose_landmarks) > 0:
+                detected_wrapper = _to_landmark_wrapper(results.pose_landmarks[0])
+    except Exception as e:
+        # Graceful fallback on unexpected inference exception
+        detected_wrapper = None
+
+    if detected_wrapper is not None and is_valid_human_pose(detected_wrapper):
+        # Smooth with previous landmarks
+        smoothed = _smooth_landmarks(detected_wrapper, _last_landmarks)
+        _last_landmarks = smoothed
+        _missing_count = 0
+        return smoothed
     else:
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-        results = pose_detector.detect(mp_image)
-        if not results.pose_landmarks or len(results.pose_landmarks) == 0:
+        # Temporary detection dropout: hold last known pose up to MAX_PERSIST_FRAMES
+        _missing_count += 1
+        if _last_landmarks is not None and _missing_count <= MAX_PERSIST_FRAMES:
+            return _last_landmarks
+        else:
+            if _missing_count > MAX_PERSIST_FRAMES:
+                _last_landmarks = None
             return None
-        return LandmarksWrapper(results.pose_landmarks[0])
 
 
 def draw(frame, landmarks):
+    """Draws skeleton joints and connecting bones clearly on the frame."""
     if landmarks is None or frame is None:
         return frame
 
-    if use_legacy and mp_draw:
-        mp_draw.draw_landmarks(frame, landmarks, mp_pose.POSE_CONNECTIONS)
-    else:
-        h, w = frame.shape[:2]
-        pts = {}
-        for idx, lm in enumerate(landmarks.landmark):
-            cx, cy = int(lm.x * w), int(lm.y * h)
-            pts[idx] = (cx, cy)
-            cv2.circle(frame, (cx, cy), 3, (0, 255, 0), -1)
+    h, w = frame.shape[:2]
+    pts = {}
 
-        for start_idx, end_idx in POSE_CONNECTIONS:
-            if start_idx in pts and end_idx in pts:
-                cv2.line(frame, pts[start_idx], pts[end_idx], (255, 255, 0), 2)
+    for idx, lm in enumerate(landmarks.landmark):
+        cx, cy = int(lm.x * w), int(lm.y * h)
+        pts[idx] = (cx, cy)
+        # Joint nodes
+        cv2.circle(frame, (cx, cy), 3, (0, 255, 120), -1)
+
+    # Connecting bones
+    for start_idx, end_idx in POSE_CONNECTIONS:
+        if start_idx in pts and end_idx in pts:
+            cv2.line(frame, pts[start_idx], pts[end_idx], (255, 220, 0), 2, cv2.LINE_AA)
 
     return frame
 

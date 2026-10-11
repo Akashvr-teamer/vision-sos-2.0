@@ -33,19 +33,17 @@ except ImportError:
 # CONSTANTS
 # -----------------------------------------
 
-ANGLE_THRESHOLD = 60
+# -----------------------------------------
+# CONSTANTS
+# -----------------------------------------
 
-GAP_THRESHOLD = 0.20
-
-MOTION_THRESHOLD = 0.005
-
-STILLNESS_SECONDS = 3.5
-
-FPS = 25
-
-ANGLE_JUMP = 25
-
-SUSTAINED_FRAMES = 45
+ANGLE_THRESHOLD = 55         # Torso angle away from vertical indicating horizontal pose
+GAP_THRESHOLD = 0.28           # Normalized head-ankle distance indicating lying down
+MOTION_THRESHOLD = 0.025       # Motion energy threshold for stillness (resistant to landmark jitter)
+STILLNESS_SECONDS = 20.0        # Immobility duration required to trigger emergency
+ANGLE_JUMP = 20                # Minimum sudden angle delta in degrees
+SUSTAINED_FRAMES = 25          # Consecutive horizontal frames to enter FALL_SUSPECTED without sudden drop
+RECOVERY_FRAMES_REQ = 15       # Consecutive standing frames required to recover back to NORMAL
 
 
 # -----------------------------------------
@@ -53,18 +51,16 @@ SUSTAINED_FRAMES = 45
 # -----------------------------------------
 
 state = "NORMAL"
-
 prev_points = None
-
-still_frames = 0
-
 prev_angle = 0.0
-
 fired = False
-
 horizontal_frames = 0
-
 trigger_reason = None
+
+# Time-based tracking
+last_frame_time = None
+accumulated_stillness = 0.0
+recovery_frames = 0
 
 
 # -----------------------------------------
@@ -72,230 +68,160 @@ trigger_reason = None
 # -----------------------------------------
 
 def update(landmarks, frame):
-
     global state
     global prev_points
-    global still_frames
     global prev_angle
     global fired
     global horizontal_frames
     global trigger_reason
+    global last_frame_time
+    global accumulated_stillness
+    global recovery_frames
 
-
-    # -------------------------------------
-    # No person detected
-    # -------------------------------------
-
-    if landmarks is None:
-
-        return None, {
-            "state": state,
-            "countdown": None
-        }
-
-
-    # -------------------------------------
-    # Calculate features
-    # -------------------------------------
-
-    angle = movement.torso_angle(
-        landmarks
-    )
-
-    gap = movement.head_ankle_gap(
-        landmarks
-    )
-
-    motion, prev_points = movement.motion_energy(
-        landmarks,
-        prev_points
-    )
-
-
-    # -------------------------------------
-    # Horizontal detection
-    # -------------------------------------
-
-    if (
-        angle > ANGLE_THRESHOLD
-        and gap < GAP_THRESHOLD
-    ):
-
-        horizontal_frames += 1
-
-    else:
-
-        horizontal_frames = 0
-
+    now = time.time()
+    dt = 0.04  # default assuming ~25 FPS
+    if last_frame_time is not None:
+        elapsed = now - last_frame_time
+        if 0.001 < elapsed < 1.0:
+            dt = elapsed
+    last_frame_time = now
 
     event = None
 
+    # -------------------------------------------------------------
+    # CASE 1: No landmarks detected (or occluded on floor)
+    # -------------------------------------------------------------
+    if landmarks is None or not hasattr(landmarks, "landmark"):
+        if state == "FALL_SUSPECTED":
+            # Person collapsed and is now occluded on the floor:
+            # DO NOT drop countdown! Continue advancing stillness timer.
+            accumulated_stillness += dt
+            countdown = max(0.0, STILLNESS_SECONDS - accumulated_stillness)
 
-    # =====================================
-    # NORMAL
-    # =====================================
+            if accumulated_stillness >= STILLNESS_SECONDS and not fired:
+                state = "EMERGENCY"
+                fired = True
+                event = {
+                    "type": "collapse",
+                    "confidence": 0.88,
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "motionless_sec": round(accumulated_stillness, 1),
+                    "torso_angle": round(prev_angle, 1),
+                    "motion_energy": 0.0,
+                    "fall_velocity": 45.0,
+                    "snapshot_frame": frame,
+                    "trigger": trigger_reason or "sudden_drop"
+                }
 
+            return event, {
+                "state": state,
+                "countdown": round(countdown, 1)
+            }
+        elif state == "EMERGENCY":
+            return None, {
+                "state": "EMERGENCY",
+                "countdown": 0.0
+            }
+        else:
+            return None, {
+                "state": "NORMAL",
+                "countdown": None
+            }
+
+    # -------------------------------------------------------------
+    # CASE 2: Landmarks present - calculate biomechanics
+    # -------------------------------------------------------------
+    angle = movement.torso_angle(landmarks)
+    gap = movement.head_ankle_gap(landmarks)
+    motion, prev_points = movement.motion_energy(landmarks, prev_points)
+
+    is_horizontal = (angle > ANGLE_THRESHOLD and gap < GAP_THRESHOLD)
+    is_standing = (angle < 45 and gap > 0.30)
+
+    if is_horizontal:
+        horizontal_frames += 1
+    else:
+        horizontal_frames = 0
+
+    # -------------------------------------------------------------
+    # STATE MACHINE
+    # -------------------------------------------------------------
     if state == "NORMAL":
-
-        # Sudden fall
-        if (
-            angle > ANGLE_THRESHOLD
-            and gap < GAP_THRESHOLD
-            and (angle - prev_angle) > ANGLE_JUMP
-        ):
-
+        # Scenario A: Sudden rapid drop/fall
+        if is_horizontal and (angle - prev_angle) > ANGLE_JUMP:
             state = "FALL_SUSPECTED"
-
-            still_frames = 0
-
+            accumulated_stillness = 0.0
+            recovery_frames = 0
             trigger_reason = "sudden_drop"
 
-
-        # Person stays horizontal
+        # Scenario B: Sustained lying horizontal
         elif horizontal_frames >= SUSTAINED_FRAMES:
-
             state = "FALL_SUSPECTED"
-
-            still_frames = 0
-
+            accumulated_stillness = 0.0
+            recovery_frames = 0
             trigger_reason = "sustained_horizontal"
 
-
-    # =====================================
-    # FALL SUSPECTED
-    # =====================================
-
     elif state == "FALL_SUSPECTED":
-
-        # Person recovered
-        if angle < ANGLE_THRESHOLD:
-
-            state = "NORMAL"
-
-            still_frames = 0
-
-            fired = False
-
-            trigger_reason = None
-
-
+        # Check for genuine standing recovery
+        if is_standing:
+            recovery_frames += 1
+            if recovery_frames >= RECOVERY_FRAMES_REQ:
+                state = "NORMAL"
+                accumulated_stillness = 0.0
+                recovery_frames = 0
+                fired = False
+                trigger_reason = None
         else:
+            recovery_frames = 0
 
-            # Check motion
+            # Immobility evaluation with jitter tolerance
             if motion < MOTION_THRESHOLD:
-
-                still_frames += 1
-
+                accumulated_stillness += dt
             else:
+                # Gradual decay rather than hard reset to 0 on 1-frame jitter
+                if motion > 0.05:
+                    accumulated_stillness = max(0.0, accumulated_stillness - dt * 2.0)
 
-                still_frames = 0
-
-
-            # ---------------------------------
-            # Emergency confirmation
-            # ---------------------------------
-
-            if (
-                still_frames / FPS
-            ) >= STILLNESS_SECONDS:
-
-                if not fired:
-
-                    state = "EMERGENCY"
-
-                    fired = True
-
-
-                    event = {
-
-                        "type": "collapse",
-
-                        "confidence": 0.9,
-
-                        "timestamp":
-                            time.strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            ),
-
-                        "motionless_sec":
-                            still_frames / FPS,
-
-                        "torso_angle":
-                            angle,
-
-                        "motion_energy":
-                            motion,
-
-                        "fall_velocity":
-                            abs(
-                                angle -
-                                prev_angle
-                            ) * FPS,
-
-                        "snapshot_frame":
-                            frame,
-
-                        "trigger":
-                            trigger_reason
-                    }
-
-
-    # =====================================
-    # EMERGENCY
-    # =====================================
+            # Trigger emergency after stillness duration
+            if accumulated_stillness >= STILLNESS_SECONDS and not fired:
+                state = "EMERGENCY"
+                fired = True
+                event = {
+                    "type": "collapse",
+                    "confidence": 0.92,
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "motionless_sec": round(accumulated_stillness, 1),
+                    "torso_angle": round(angle, 1),
+                    "motion_energy": round(motion, 4),
+                    "fall_velocity": round(abs(angle - prev_angle) / max(dt, 0.001), 1),
+                    "snapshot_frame": frame,
+                    "trigger": trigger_reason or "sudden_drop"
+                }
 
     elif state == "EMERGENCY":
-
-        # Allow recovery
-        if angle < ANGLE_THRESHOLD:
-
-            state = "NORMAL"
-
-            still_frames = 0
-
-            fired = False
-
-            horizontal_frames = 0
-
-            trigger_reason = None
-
-
-    # -------------------------------------
-    # Update previous angle
-    # -------------------------------------
+        # Allow recovery only after sustained standing
+        if is_standing:
+            recovery_frames += 1
+            if recovery_frames >= (RECOVERY_FRAMES_REQ * 2):
+                state = "NORMAL"
+                fired = False
+                accumulated_stillness = 0.0
+                recovery_frames = 0
+                trigger_reason = None
+        else:
+            recovery_frames = 0
 
     prev_angle = angle
 
-
-    # -------------------------------------
-    # Countdown
-    # -------------------------------------
-
+    # Countdown calculation
     countdown = None
-
-
     if state == "FALL_SUSPECTED":
+        countdown = round(max(0.0, STILLNESS_SECONDS - accumulated_stillness), 1)
 
-        countdown = max(
-            0.0,
-            STILLNESS_SECONDS
-            - (still_frames / FPS)
-        )
-
-
-    # -------------------------------------
-    # Status
-    # -------------------------------------
-
-    status = {
-
+    return event, {
         "state": state,
-
         "countdown": countdown
     }
-
-
-    return event, status
 
 
 # -----------------------------------------
@@ -303,29 +229,25 @@ def update(landmarks, frame):
 # -----------------------------------------
 
 def reset():
-
     global state
     global prev_points
-    global still_frames
     global prev_angle
     global fired
     global horizontal_frames
     global trigger_reason
-
+    global last_frame_time
+    global accumulated_stillness
+    global recovery_frames
 
     state = "NORMAL"
-
     prev_points = None
-
-    still_frames = 0
-
     prev_angle = 0.0
-
     fired = False
-
     horizontal_frames = 0
-
     trigger_reason = None
+    last_frame_time = None
+    accumulated_stillness = 0.0
+    recovery_frames = 0
 
 
 # -----------------------------------------

@@ -7,16 +7,25 @@ BASE_DIR = os.path.dirname(
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+import time
 from flask import (
     Flask,
     jsonify,
     send_file,
     send_from_directory,
-    request
+    request,
+    Response
 )
 
 from database.database import init_db, get_events, update_event_category
-from backend.system_state import read_state, request_new_test, request_stop
+from backend.system_state import (
+    read_state,
+    request_new_test,
+    request_stop,
+    set_active_category,
+    get_latest_frame_bytes,
+    wait_for_next_frame
+)
 from cv import emergency_detector
 
 FRONTEND_DIR = os.path.join(
@@ -63,17 +72,19 @@ def home():
 @app.route("/api/start_test", methods=["POST"])
 def start_test():
     """
-    Unified Start Endpoint:
-    Automatically runs ALL 4 detectors (Falls, Car Accidents, Robbery, Fire)
-    concurrently without needing manual category selection.
+    Start Endpoint:
+    Runs the selected detection category (e.g. Fall, Car Accident, Robbery, Fire, or Unified)
+    to execute only the required pipeline and avoid cross-detector clash.
     """
     source_type = request.form.get("source_type", "video")
+    category = request.form.get("category", "Unified").strip() or "Unified"
 
     if source_type == "camera":
-        request_new_test(0, "Unified")
+        request_new_test(0, category)
         return jsonify({
             "success": True,
-            "message": "Live webcam started with Unified Multi-Emergency AI detection."
+            "category": category,
+            "message": f"Live webcam started with {category} detection active."
         })
 
     if "video" not in request.files:
@@ -86,10 +97,26 @@ def start_test():
     file_path = os.path.join(UPLOADS_DIR, video_file.filename)
     video_file.save(file_path)
 
-    request_new_test(file_path, "Unified")
+    request_new_test(file_path, category)
     return jsonify({
         "success": True,
-        "message": f"Processing '{video_file.filename}' with Unified Multi-Emergency AI."
+        "category": category,
+        "message": f"Processing '{video_file.filename}' with {category} detection active."
+    })
+
+
+@app.route("/api/set_category", methods=["POST"])
+def set_category_route():
+    """Switch active emergency detection category on the fly."""
+    data = request.get_json() or {}
+    category = data.get("category", "Unified").strip() or "Unified"
+    set_active_category(category)
+    if hasattr(emergency_detector, "set_active_category"):
+        emergency_detector.set_active_category(category)
+    return jsonify({
+        "success": True,
+        "active_category": category,
+        "message": f"Active detection category set to: {category}"
     })
 
 
@@ -155,20 +182,46 @@ def update_category(event_id):
 
 @app.route("/api/frame")
 def frame():
-    if not os.path.exists(LIVE_FRAME_PATH):
-        return jsonify({
-            "error": "Camera frame not available"
-        }), 404
+    frame_bytes = get_latest_frame_bytes()
+    if frame_bytes is not None:
+        response = Response(frame_bytes, mimetype="image/jpeg")
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
-    response = send_file(
-        LIVE_FRAME_PATH,
-        mimetype="image/jpeg",
-        max_age=0
+    if os.path.exists(LIVE_FRAME_PATH):
+        response = send_file(
+            LIVE_FRAME_PATH,
+            mimetype="image/jpeg",
+            max_age=0
+        )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
+    return jsonify({
+        "error": "Camera frame not available"
+    }), 404
+
+
+@app.route("/api/video_feed")
+def video_feed():
+    """High-speed MJPEG video stream direct from RAM buffer."""
+    def generate():
+        while True:
+            frame_bytes = wait_for_next_frame(timeout=0.5)
+            if frame_bytes is not None:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+            else:
+                time.sleep(0.03)
+
+    return Response(
+        generate(),
+        mimetype="multipart/x-mixed-replace; boundary=frame"
     )
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
 
 
 @app.route("/api/health")

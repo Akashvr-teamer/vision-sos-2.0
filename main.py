@@ -16,10 +16,12 @@ from backend.event_handler import handle_event
 from backend.system_state import (
     write_status,
     write_event,
+    read_state,
     set_system_active,
     set_processing_status,
     check_for_new_test,
-    is_stop_requested
+    is_stop_requested,
+    set_latest_frame_bytes
 )
 
 
@@ -96,26 +98,30 @@ def run_flask():
 
 
 # ============================================================
-# SAVE LIVE FRAME
+# LIVE FRAME BUFFER DISPATCHER
 # ============================================================
 
-def save_live_frame(frame):
-    temp_path = os.path.join(
-        os.path.dirname(LIVE_FRAME_PATH),
-        "live_frame_tmp.jpg"
-    )
-
-    success = cv2.imwrite(
-        temp_path,
-        frame,
-        [cv2.IMWRITE_JPEG_QUALITY, 85]
-    )
-
+def save_live_frame(frame, persist_disk=False):
+    """
+    Encodes frame to JPEG in memory for ultra-fast, zero-latency streaming.
+    Only writes to disk occasionally to avoid OneDrive sync locks.
+    """
+    success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     if success:
-        try:
-            os.replace(temp_path, LIVE_FRAME_PATH)
-        except Exception:
-            pass
+        frame_bytes = buffer.tobytes()
+        set_latest_frame_bytes(frame_bytes)
+
+        if persist_disk:
+            temp_path = os.path.join(
+                os.path.dirname(LIVE_FRAME_PATH),
+                "live_frame_tmp.jpg"
+            )
+            try:
+                with open(temp_path, "wb") as f:
+                    f.write(frame_bytes)
+                os.replace(temp_path, LIVE_FRAME_PATH)
+            except Exception:
+                pass
 
 
 # ============================================================
@@ -126,8 +132,10 @@ def run_detection_worker(initial_source=None):
     """
     Main detection worker loop. Runs continuously in background.
     Stays in standby until a source (live webcam or uploaded video) is triggered.
+    Supports isolated single-hazard pipelines or unified multi-hazard mode.
     """
     current_source = initial_source
+    current_category = "Unified"
     running = True
 
     show_desktop_window = "--show-window" in sys.argv
@@ -144,9 +152,10 @@ def run_detection_worker(initial_source=None):
 
             # Wait for test request from UI
             while current_source is None and running:
-                new_source, _ = check_for_new_test()
+                new_source, new_cat = check_for_new_test()
                 if new_source is not None:
                     current_source = new_source
+                    current_category = new_cat or "Unified"
                     break
                 time.sleep(0.2)
 
@@ -155,9 +164,12 @@ def run_detection_worker(initial_source=None):
 
         # Open source
         source_name = "Live Webcam" if current_source == 0 else os.path.basename(str(current_source))
-        print(f"\n[CV] Starting detection on: {source_name}")
+        print(f"\n[CV] Starting detection on: {source_name} (Category: {current_category})")
         set_processing_status(True, source_name)
         emergency_detector.reset()
+        emergency_detector.set_active_category(current_category)
+        if hasattr(pose, "reset_tracking"):
+            pose.reset_tracking()
 
         cap = camera.open_source(current_source)
         if cap is None:
@@ -176,27 +188,51 @@ def run_detection_worker(initial_source=None):
                     current_source = None
                     break
 
-                # Check for new source switch
-                new_source, _ = check_for_new_test()
+                # Check for new source or category switch
+                new_source, new_cat = check_for_new_test()
                 if new_source is not None:
-                    print(f"\n[CV] Switching source to: {new_source}")
+                    print(f"\n[CV] Switching source to: {new_source} ({new_cat})")
                     current_source = new_source
+                    current_category = new_cat or "Unified"
                     break
 
+                # Support dynamic category change during active stream without restart
+                active_cat = read_state().get("active_category")
+                if active_cat and active_cat != current_category:
+                    print(f"\n[CV] Switched active pipeline category to: {active_cat}")
+                    current_category = active_cat
+                    emergency_detector.set_active_category(current_category)
+
                 # Read Frame
-                frame = camera.read_frame(cap)
-                if frame is None:
+                raw_frame = camera.read_frame(cap)
+                if raw_frame is None:
                     print(f"\n[CV] Stream ended for {source_name}. Returning to Standby.")
                     current_source = None
                     break
 
+                # Resize early to standard processing size (width 640) for high FPS
+                frame = camera.resize_frame(raw_frame, width=640)
+
                 frame_count += 1
 
-                # 1. Pose landmarks (for Fall and Robbery)
-                landmarks = pose.get_landmarks(frame)
+                # Normalize active category
+                cat_lower = current_category.strip().lower()
+                is_car_mode = any(k in cat_lower for k in ["car", "accident"])
+                is_fall_mode = any(k in cat_lower for k in ["fall", "collapse"])
+                is_fire_mode = any(k in cat_lower for k in ["fire", "smoke", "combustion"])
+                is_robbery_mode = any(k in cat_lower for k in ["robbery", "threat"])
+                is_unified_mode = (not is_car_mode and not is_fall_mode and not is_fire_mode and not is_robbery_mode) or cat_lower == "unified"
 
-                # 2. Unified emergency detection across all 4 hazard types
-                event, status = emergency_detector.update(landmarks, frame)
+                # 1. Pose landmarks:
+                # In Car Accident or Fire mode, SKIP pose landmarks completely (landmarks = None).
+                # This eliminates MediaPipe pose calculation overhead and prevents stick figures or false human poses.
+                if is_car_mode or is_fire_mode:
+                    landmarks = None
+                else:
+                    landmarks = pose.get_landmarks(frame)
+
+                # 2. Emergency detection isolated to requested category
+                event, status = emergency_detector.update(landmarks, frame, category=current_category)
                 current_state = status["state"]
                 countdown = status["countdown"]
 
@@ -208,8 +244,16 @@ def run_detection_worker(initial_source=None):
                     "fire_state": status.get("fire_state", "NORMAL")
                 })
 
-                # 4. Draw pose skeleton
-                display_frame = pose.draw(frame, landmarks) if landmarks else frame.copy()
+                # 4. Visual Scene Overlays
+                display_frame = frame.copy()
+
+                # A. Render Overlays (Vehicle boxes and Fire boxes)
+                if is_car_mode or is_fire_mode or is_unified_mode:
+                    display_frame = emergency_detector.draw(display_frame)
+
+                # B. Render Pose Skeleton only if genuine human detected and in Fall, Robbery, or Unified mode
+                if landmarks and (is_fall_mode or is_robbery_mode or is_unified_mode) and current_state not in ("ACCIDENT_SUSPECTED", "ACCIDENT_EMERGENCY"):
+                    display_frame = pose.draw(display_frame, landmarks)
 
                 # 5. Draw UI Telemetry HUD on frame
                 h, w = display_frame.shape[:2]
@@ -235,13 +279,28 @@ def run_detection_worker(initial_source=None):
                 if countdown is not None and isinstance(countdown, (int, float)):
                     status_label += f" ({countdown:.1f}s)"
 
-                cv2.putText(display_frame, f"STATUS: {status_label}", (20, 32),
-                            cv2.FONT_HERSHEY_DUPLEX, 0.75, status_color, 2, cv2.LINE_AA)
-                cv2.putText(display_frame, "VisionSOS AI", (w - 150, 32),
-                            cv2.FONT_HERSHEY_DUPLEX, 0.6, (180, 190, 200), 1, cv2.LINE_AA)
+                # Category badge display string
+                cat_tag = current_category.upper()
+                if "CAR" in cat_tag or "ACCIDENT" in cat_tag:
+                    cat_tag = "CAR ACCIDENT"
+                elif "FALL" in cat_tag or "COLLAPSE" in cat_tag:
+                    cat_tag = "FALL & COLLAPSE"
+                elif "ROBBERY" in cat_tag:
+                    cat_tag = "ROBBERY"
+                elif "FIRE" in cat_tag:
+                    cat_tag = "FIRE & SMOKE"
+                else:
+                    cat_tag = "UNIFIED ALL"
 
-                # Save frame for dashboard HTTP stream
-                save_live_frame(display_frame)
+                cv2.putText(display_frame, f"STATUS: {status_label}", (20, 32),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.70, status_color, 2, cv2.LINE_AA)
+                cv2.putText(display_frame, f"MODE: {cat_tag}", (w - 240, 24),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.50, (0, 220, 255), 1, cv2.LINE_AA)
+                cv2.putText(display_frame, "VisionSOS AI", (w - 240, 44),
+                            cv2.FONT_HERSHEY_DUPLEX, 0.45, (160, 175, 190), 1, cv2.LINE_AA)
+
+                # Save frame in memory for ultra-smooth video stream (persist to disk only occasionally)
+                save_live_frame(display_frame, persist_disk=(frame_count % 30 == 0))
 
                 # Process triggered emergency event
                 if event is not None:
