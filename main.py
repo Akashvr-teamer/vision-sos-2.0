@@ -236,12 +236,17 @@ def run_detection_worker(initial_source=None):
                 current_state = status["state"]
                 countdown = status["countdown"]
 
+                # Expose confirmed robbery signals for overlay and state API
+                robbery_sub = status.get("robbery_status", {})
+                status["robbery_signals"] = robbery_sub.get("active_signals", {})
+
                 # 3. Update backend state for API
                 write_status(current_state, countdown, {
                     "fall_state": status.get("fall_state", "NORMAL"),
                     "car_state": status.get("car_state", "NORMAL"),
                     "robbery_state": status.get("robbery_state", "NORMAL"),
-                    "fire_state": status.get("fire_state", "NORMAL")
+                    "fire_state": status.get("fire_state", "NORMAL"),
+                    "robbery_signals": status["robbery_signals"],
                 })
 
                 # 4. Visual Scene Overlays
@@ -254,6 +259,32 @@ def run_detection_worker(initial_source=None):
                 # B. Render Pose Skeleton only if genuine human detected and in Fall, Robbery, or Unified mode
                 if landmarks and (is_fall_mode or is_robbery_mode or is_unified_mode) and current_state not in ("ACCIDENT_SUSPECTED", "ACCIDENT_EMERGENCY"):
                     display_frame = pose.draw(display_frame, landmarks)
+
+                # C. Robbery confirmed-signal overlay — show WHAT movements are detected
+                if is_robbery_mode or is_unified_mode:
+                    robbery_signals = status.get("robbery_signals", {})
+                    if robbery_signals:
+                        rh, rw_dim = display_frame.shape[:2]
+                        badge_y = rh - 20 - (len(robbery_signals) * 28)
+                        badge_y = max(badge_y, 60)
+                        for sig_label in robbery_signals.values():
+                            badge_x = 12
+                            badge_w = min(len(sig_label) * 11 + 20, rw_dim - 24)
+                            # Draw pill background
+                            cv2.rectangle(display_frame,
+                                          (badge_x, badge_y - 20),
+                                          (badge_x + badge_w, badge_y + 4),
+                                          (20, 60, 180), -1)
+                            cv2.rectangle(display_frame,
+                                          (badge_x, badge_y - 20),
+                                          (badge_x + badge_w, badge_y + 4),
+                                          (80, 140, 255), 1)
+                            cv2.putText(display_frame,
+                                        f"DETECTED: {sig_label}",
+                                        (badge_x + 8, badge_y),
+                                        cv2.FONT_HERSHEY_DUPLEX, 0.42,
+                                        (200, 225, 255), 1, cv2.LINE_AA)
+                            badge_y += 28
 
                 # 5. Draw UI Telemetry HUD on frame
                 h, w = display_frame.shape[:2]
@@ -317,11 +348,16 @@ def run_detection_worker(initial_source=None):
                 # Terminal telemetry log on state transition
                 if current_state != last_log_state:
                     if "EMERGENCY" in current_state:
-                        print(f"[CV] 🚨 STATE -> {current_state}")
+                        print(f"[CV] STATE -> {current_state}")
                     elif "SUSPECTED" in current_state or "SUSPICIOUS" in current_state:
-                        print(f"[CV] ⚠️  STATE -> {current_state}")
+                        print(f"[CV] STATE -> {current_state}")
+                        # Print confirmed robbery causes if applicable
+                        rob_sigs = status.get("robbery_signals", {})
+                        if rob_sigs:
+                            for label in rob_sigs.values():
+                                print(f"   >> Confirmed: {label}")
                     elif current_state == "NORMAL":
-                        print(f"[CV] ✅ STATE -> NORMAL (All Hazards Clear)")
+                        print("[CV] STATE -> NORMAL (All Hazards Clear)")
                     last_log_state = current_state
 
                 # Optional desktop OpenCV window only if explicitly requested

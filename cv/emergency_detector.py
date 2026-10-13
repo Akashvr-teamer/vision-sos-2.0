@@ -118,7 +118,9 @@ class UnifiedEmergencyDetector:
             "car_state": car_status["state"],
             "robbery_state": robbery_status["state"],
             "fire_state": fire_status["state"],
-            "active_category": self.active_category
+            "active_category": self.active_category,
+            # Full robbery sub-status so callers can read confirmed signal labels
+            "robbery_status": robbery_status,
         }
 
 
