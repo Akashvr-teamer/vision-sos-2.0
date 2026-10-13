@@ -14,7 +14,7 @@ except ImportError:
 
 
 # Minimum consecutive frames a raw signal must hold before it is "confirmed"
-SIGNAL_CONFIRM_FRAMES = 4
+SIGNAL_CONFIRM_FRAMES = 8   # frames a signal must hold before being confirmed (~0.27s at 30fps)
 
 
 class RobberyDetector:
@@ -237,7 +237,7 @@ class RobberyDetector:
         event = None
 
         if increment > 0:
-            self.suspicious_frames = min(self.suspicious_frames + increment, 80)
+            self.suspicious_frames = min(self.suspicious_frames + increment, 120)
             # Set trigger reason to ALL active confirmed signals
             self.trigger_reason = " + ".join(
                 self.SIGNAL_LABELS[k] for k in confirmed
@@ -247,14 +247,14 @@ class RobberyDetector:
             self.suspicious_frames = max(0, self.suspicious_frames - 1)
 
         # --- State Machine ---
-        # SUSPICIOUS at 12 (~0.4s of one confirmed signal)
-        # EMERGENCY at 28  (~1s of one strong or 0.5s of two)
+        # SUSPICIOUS_ACTIVITY at 22 pts (~0.7s of one strong confirmed signal)
+        # EMERGENCY at 55 pts  (~1.8s of one strong or ~0.9s of two stacked signals)
         if self.state == "NORMAL":
-            if self.suspicious_frames >= 12:
+            if self.suspicious_frames >= 22:
                 self.state = "SUSPICIOUS_ACTIVITY"
 
         elif self.state == "SUSPICIOUS_ACTIVITY":
-            if self.suspicious_frames >= 28:
+            if self.suspicious_frames >= 55:
                 if not self.fired:
                     self.state = "EMERGENCY"
                     self.fired = True
@@ -280,7 +280,7 @@ class RobberyDetector:
                 self.fired = False
 
         countdown = (
-            max(0.0, 1.0 - (self.suspicious_frames / 28.0))
+            max(0.0, 1.0 - (self.suspicious_frames / 55.0))
             if self.state == "SUSPICIOUS_ACTIVITY"
             else None
         )
